@@ -12,11 +12,18 @@ venv.
 ```bash
 poetry install
 poetry run python -m ipykernel install --user --name data-science
+poetry run nbstripout --install
 ```
 
 Open notebooks with the `data-science` kernel. `shared/` is installed as a
 regular importable package, so `import shared.plots.style` (etc.) works from
 any notebook regardless of how deeply it's nested — no `sys.path` hacks.
+
+`nbstripout --install` sets up a local git filter (see `.gitattributes`) that
+strips notebook outputs/execution counts before they're staged — outputs stay
+visible in your working copy while you run the notebook, but never land in a
+commit. Run this once per clone (it configures `.git/config`, which isn't
+itself version-controlled).
 
 ## Directory contract
 

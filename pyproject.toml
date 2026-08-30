@@ -31,3 +31,8 @@ packages = [{ include = "shared" }]
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "nbstripout (>=0.9.1,<0.10.0)"
+]
