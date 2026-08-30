@@ -1,0 +1,26 @@
+#!/bin/sh
+# Confirms notebook outputs were actually stripped before each commit.
+# The stripping itself happens earlier, via the nbstripout git clean filter
+# at `git add` time (see .gitattributes) — this hook just double-checks the
+# staged result and prints a confirmation, and fails loudly if a notebook
+# somehow got staged with outputs still in it (e.g. nbstripout isn't
+# installed locally — see AGENTS.md).
+
+notebooks=$(git diff --cached --name-only --diff-filter=ACM -- '*.ipynb')
+
+if [ -z "$notebooks" ]; then
+    exit 0
+fi
+
+status=0
+for nb in $notebooks; do
+    if git show ":$nb" | grep -q '"execution_count": [0-9]'; then
+        echo "pre-commit: ERROR — $nb is staged WITH outputs." >&2
+        echo "  Run: poetry run nbstripout --install   (one-time per clone)" >&2
+        status=1
+    else
+        echo "pre-commit: outputs stripped — $nb"
+    fi
+done
+
+exit $status

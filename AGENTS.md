@@ -13,6 +13,7 @@ venv.
 poetry install
 poetry run python -m ipykernel install --user --name data-science
 poetry run nbstripout --install
+git config core.hooksPath .githooks
 ```
 
 Open notebooks with the `data-science` kernel. `shared/` is installed as a
@@ -20,10 +21,15 @@ regular importable package, so `import shared.plots.style` (etc.) works from
 any notebook regardless of how deeply it's nested — no `sys.path` hacks.
 
 `nbstripout --install` sets up a local git filter (see `.gitattributes`) that
-strips notebook outputs/execution counts before they're staged — outputs stay
-visible in your working copy while you run the notebook, but never land in a
-commit. Run this once per clone (it configures `.git/config`, which isn't
-itself version-controlled).
+strips notebook outputs/execution counts at `git add` time, before they ever
+reach the index — outputs stay visible in your working copy while you run
+the notebook, they just never land in a commit. `git config core.hooksPath
+.githooks` then points git at the repo's tracked `.githooks/pre-commit`,
+which prints a confirmation line per staged notebook at commit time (and
+fails the commit if one somehow still has outputs — usually because the
+`nbstripout --install` step above was skipped on this clone). Both are
+one-time-per-clone, since neither `.git/config` nor the default hooks path
+is itself version-controlled.
 
 ## Directory contract
 
@@ -39,6 +45,13 @@ Inside each `adhoc/...` or `playbooks/...` project folder:
 - `data/raw/{data_folder}/{date_or_range}/data.csv|.parquet` — imported files or
   API/portal cache. Never hand-edited. The date/range (or another parameter)
   subfolder is included only when explicitly relevant, not by default.
+  For anything fetched (not just imported), the notebook should **load the
+  cache if it exists, and only fetch (then write the cache) if it doesn't** —
+  see `analyses/adhoc/template_fetch_data/`. Re-running a notebook shouldn't
+  re-hit an API/portal for a pull it already has on disk. The exception is
+  genuinely live/real-time data (e.g. GTFS-RT), where each pull *is* a new
+  snapshot — key those by pull timestamp instead, as
+  `analyses/playbooks/inspect_gtfs_rt/` does.
 - `data/processed/{data_folder}/data.csv|.parquet` — only things produced
   *from* a notebook or script; nothing goes here by hand.
 - `outputs/{date_or_range}/` — reports (`.md`, no subfolder needed), plus
