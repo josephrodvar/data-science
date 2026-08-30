@@ -1,0 +1,8 @@
+# GTFS-Realtime feed config for shared/gtfs_rt.py.
+# Add an agency by giving its raw .pb feed base_url + feed filenames.
+mbta:
+  base_url: https://cdn.mbta.com/realtime
+  feeds:
+    vehicle_positions: VehiclePositions.pb
+    trip_updates: TripUpdates.pb
+    alerts: Alerts.pb

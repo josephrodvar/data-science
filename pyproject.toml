@@ -1,0 +1,33 @@
+[project]
+name = "data-science"
+version = "0.1.0"
+description = "Urban / transportation / open-data analysis workspace"
+authors = [{ name = "Joseph Rodriguez", email = "joseph.rodriguez.v@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "pandas",
+  "numpy",
+  "jupyterlab",
+  "notebook",
+  "ipykernel",
+  "folium",
+  "seaborn",
+  "matplotlib",
+  "osmnx",
+  "contextily",
+  "statsmodels",
+  "scikit-learn",
+  "requests",
+  "pyyaml",
+  "gtfs-realtime-bindings",
+  "pyarrow",
+]
+
+[tool.poetry]
+package-mode = true
+packages = [{ include = "shared" }]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
