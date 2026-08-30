@@ -217,20 +217,17 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Analysis data & outputs — never commit real/fetched data or generated outputs
+# Analysis data & outputs — never commit real/fetched data or generated
+# outputs. Notebooks create data/raw, data/processed, and outputs/ on
+# demand (mkdir(parents=True, exist_ok=True)), so these directories don't
+# need to exist ahead of time or be tracked when empty.
 analyses/**/data/**
 analyses/**/outputs/**
-
-# Keep the raw/processed/outputs directories themselves traversable so their
-# .gitkeep placeholders (and nothing else) survive by default.
-!analyses/**/data/
-!analyses/**/data/raw/
-!analyses/**/data/processed/
-!analyses/**/outputs/
-!analyses/**/*.gitkeep
 
 # Exception: template_local_data ships with a small synthetic sample CSV
 # so the template notebook runs with zero setup — everything else under
 # its data/ (processed/) and outputs/ stays ignored like every other analysis.
+!analyses/adhoc/template_local_data/data/
+!analyses/adhoc/template_local_data/data/raw/
 !analyses/adhoc/template_local_data/data/raw/sample_counts/
 !analyses/adhoc/template_local_data/data/raw/sample_counts/data.csv
