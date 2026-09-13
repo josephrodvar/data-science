@@ -37,10 +37,10 @@ is itself version-controlled.
 analyses/
   adhoc/{domain}/{analysis_project_name}/     # e.g. adhoc/mta/fare-evasion
   adhoc/{analysis_project_name}/              # when no natural domain grouping exists
-  playbooks/{repeatable_analysis_folder}/     # e.g. playbooks/bluebikes_demand_tracking
+  runbooks/{repeatable_analysis_folder}/      # e.g. runbooks/bluebikes_demand_tracking
 ```
 
-Inside each `adhoc/...` or `playbooks/...` project folder:
+Inside each `adhoc/...` or `runbooks/...` project folder:
 
 - `data/raw/{data_folder}/{date_or_range}/data.csv|.parquet` — imported files or
   API/portal cache. Never hand-edited. The date/range (or another parameter)
@@ -51,7 +51,7 @@ Inside each `adhoc/...` or `playbooks/...` project folder:
   re-hit an API/portal for a pull it already has on disk. The exception is
   genuinely live/real-time data (e.g. GTFS-RT), where each pull *is* a new
   snapshot — key those by pull timestamp instead, as
-  `analyses/playbooks/inspect_gtfs_rt/` does.
+  `analyses/runbooks/inspect_gtfs_rt/` does.
 - `data/processed/{data_folder}/data.csv|.parquet` — only things produced
   *from* a notebook or script; nothing goes here by hand.
 - `outputs/{date_or_range}/` — reports (`.md`, no subfolder needed), plus
@@ -81,7 +81,7 @@ Currently:
   wrapper. Deliberately thin; expect source-specific variants later.
 - `shared/plots/style.py` — `apply_theme()` and `add_source_footnote()`.
 - `shared/gtfs_rt.py` + `shared/agencies.yaml` — GTFS-Realtime `.pb` feed
-  fetch/parse helpers (see `analyses/playbooks/inspect_gtfs_rt/`).
+  fetch/parse helpers (see `analyses/runbooks/inspect_gtfs_rt/`).
 
 ## Templates
 
