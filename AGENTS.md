@@ -67,10 +67,9 @@ Inside each `adhoc/...` or `runbooks/...` project folder:
   `utils.py` / `plots.py` alongside the notebook once it's grown unwieldy,
   or into a standalone script when a repeatable run is explicitly wanted —
   don't pre-abstract before that's actually true.
-- Every plot gets a footnote: `Source: {data_source}`. Use
-  `shared.plots.style.add_source_footnote(fig, source)`.
 - Call `shared.plots.style.apply_theme()` near the top of a notebook before
-  plotting, for consistent fonts/palette/dpi.
+  plotting, for consistent fonts/palette/dpi. See the `chart-style` skill
+  for full charting conventions (source footnotes, tick formatting, titles).
 
 ## `shared/`
 

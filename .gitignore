@@ -231,3 +231,10 @@ analyses/**/outputs/**
 !analyses/adhoc/template_local_data/data/raw/
 !analyses/adhoc/template_local_data/data/raw/sample_counts/
 !analyses/adhoc/template_local_data/data/raw/sample_counts/data.csv
+
+# .vscode
+.vscode/
+
+# Local secrets (API keys, etc.) — copy config_secrets_template.yml to
+# config_secrets.yml and fill it in; the template stays tracked.
+config_secrets.yml
