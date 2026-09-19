@@ -4,6 +4,14 @@ A single-Poetry-environment workspace for ad-hoc and repeatable urban /
 transportation / open-data analyses: MTA, GTFS, open data portals,
 imported CSVs, and similar.
 
+## Stakes
+
+This repo has no CI and nothing downstream depends on it — no deploys, no
+consumers of its outputs beyond the analyst running the notebook. Treat it
+accordingly: don't gate changes on adding tests/CI, don't over-engineer for
+hypothetical breakage, and don't ask for extra confirmation before merging
+that a low-stakes personal analysis repo wouldn't need.
+
 ## Environment
 
 One root Poetry environment covers the whole repo — there's no per-analysis
