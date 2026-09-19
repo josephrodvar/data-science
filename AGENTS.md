@@ -81,6 +81,9 @@ Currently:
 - `shared/plots/style.py` — `apply_theme()` and `add_source_footnote()`.
 - `shared/gtfs_rt.py` + `shared/agencies.yaml` — GTFS-Realtime `.pb` feed
   fetch/parse helpers (see `analyses/runbooks/inspect_gtfs_rt/`).
+- `shared/slack.py` — `send_message(channel, text, ...)` posts to any
+  Slack channel via a bot token (`api_keys.slack.bot_token` in
+  `config_secrets.yml`); setup steps are in the module docstring.
 
 ## Templates
 

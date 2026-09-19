@@ -1,4 +1,4 @@
-# bluebikes_ridership
+# bluebikes
 
 Repeatable runbook for tracking monthly Bluebikes ridership (total trips per
 month) over a specified month range. Pulls monthly trip-history zips from
@@ -19,3 +19,13 @@ that month. Plots them on a Folium map (`outputs/{month}/new_stations_map.html`)
 using `start_lat`/`start_lng`; each marker's popup shows days used in the
 month, average daily ridership, and the station's ridership rank among all
 stations that month.
+
+`analysis_top_stations.ipynb` takes a single `MONTH` param (`YYYY-MM`,
+defaults to the latest complete calendar month) and ranks stations by
+average daily ridership separately for weekdays and weekends, writing the
+top 10 of each to a Markdown report (`outputs/{month}/top_stations_report.md`)
+and plotting their union on a Folium map
+(`outputs/{month}/top_stations_map.html`). Markers are colored by whether a
+station ranks top 10 on weekdays only, weekends only, or both (gold); every
+popup shows the station's weekday and weekend ridership and rank regardless
+of category.
