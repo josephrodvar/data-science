@@ -27,6 +27,7 @@ right-clicking a channel > "View channel details" > bottom of the panel.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import requests
@@ -34,6 +35,48 @@ import yaml
 
 _SECRETS_PATH = Path(__file__).resolve().parent.parent / "config_secrets.yml"
 _POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+
+_HEADER_RE = re.compile(r"^#{1,6}\s*(.+)$", re.MULTILINE)
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_LINK_RE = re.compile(r"\[([^\]]+)\]\((\S+?)\)")
+
+
+def markdown_to_mrkdwn(text: str) -> str:
+    """Convert common CommonMark syntax to Slack's `mrkdwn` dialect.
+
+    Slack doesn't render standard Markdown: `#` headers and `**bold**`
+    print as literal characters, and pipe tables don't render at all.
+    This handles the constructs `shared/slack.py` callers tend to
+    produce (headers, bold, links, pipe tables) — it's not a full
+    CommonMark parser, so unusual input may still need hand-tuning.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    table_block: list[str] = []
+
+    def flush_table():
+        if table_block:
+            out.append("```\n" + "\n".join(table_block) + "\n```")
+            table_block.clear()
+
+    for line in lines:
+        stripped = line.strip()
+        is_table_row = stripped.startswith("|") and stripped.endswith("|")
+        is_separator = is_table_row and set(stripped.replace("|", "").strip()) <= {"-", " ", ":"}
+        if is_table_row:
+            if not is_separator:
+                table_block.append(stripped)
+            continue
+        flush_table()
+        out.append(line)
+    flush_table()
+
+    result = "\n".join(out)
+    result = _HEADER_RE.sub(lambda m: f"*{m.group(1).strip()}*", result)
+    result = _BOLD_RE.sub(lambda m: f"*{m.group(1)}*", result)
+    result = _LINK_RE.sub(lambda m: f"<{m.group(2)}|{m.group(1)}>", result)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
 
 
 def load_bot_token() -> str | None:
