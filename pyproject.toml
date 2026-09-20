@@ -16,6 +16,7 @@ dependencies = [
   "matplotlib",
   "osmnx",
   "contextily",
+  "geopandas",
   "statsmodels",
   "scikit-learn",
   "requests",
