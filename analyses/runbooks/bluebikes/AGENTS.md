@@ -1,31 +1,32 @@
 # bluebikes
 
-Repeatable runbook for tracking monthly Bluebikes ridership (total trips per
-month) over a specified month range. Pulls monthly trip-history zips from
-the [Bluebikes/Hubway S3 data bucket](https://s3.amazonaws.com/hubway-data/index.html)
-(named `{YYYYMM}-bluebikes-tripdata.zip`, available from `201805` onward),
-caches each month's extracted CSV under `data/raw/`, and plots a seaborn
-line of monthly ridership across the range. Change the `MONTH_START` /
-`MONTH_END` params (`YYYY-MM`) in the params cell to re-run for a different
-range.
+Repeatable runbook for Bluebikes ridership and station activity, built on
+the monthly trip-history zips in the
+[Bluebikes/Hubway S3 data bucket](https://s3.amazonaws.com/hubway-data/index.html)
+(named `{YYYYMM}-bluebikes-tripdata.zip`, available from `201805` onward).
+Each month's extracted CSV is cached under
+`data/raw/bluebikes_tripdata/{yyyymm}/data.csv`.
 
-`analysis_yoy.ipynb` overlays the same range against the prior year, month
-for month.
+`analysis_ridership.ipynb` takes a `MONTH_START` / `MONTH_END` range
+(`YYYY-MM`) and plots monthly ridership (total trips per month) across it,
+plus a year-over-year overlay of the same range against the prior year,
+month for month. Charts go to `outputs/{start}_{end}/charts/`.
 
-`new_stations.ipynb` takes a single `MONTH` param (`YYYY-MM`, defaults to the
-latest complete calendar month) and finds stations whose `start_station_name`
-appears that month but not in the month before — i.e. stations that opened
-that month. Plots them on a Folium map (`outputs/{month}/new_stations_map.html`)
-using `start_lat`/`start_lng`; each marker's popup shows days used in the
-month, average daily ridership, and the station's ridership rank among all
-stations that month.
+`analysis_stations.ipynb` takes a single `MONTH` param (`YYYY-MM`, defaults
+to the latest complete calendar month) and writes to `outputs/{month}/`:
 
-`analysis_top_stations.ipynb` takes a single `MONTH` param (`YYYY-MM`,
-defaults to the latest complete calendar month) and ranks stations by
-average daily ridership separately for weekdays and weekends, writing the
-top 10 of each to a Markdown report (`outputs/{month}/top_stations_report.md`)
-and plotting their union on a Folium map
-(`outputs/{month}/top_stations_map.html`). Markers are colored by whether a
-station ranks top 10 on weekdays only, weekends only, or both (gold); every
-popup shows the station's weekday and weekend ridership and rank regardless
-of category.
+- `all_stations_map.html` — every station active that month, sized by
+  average daily ridership, with stations new that month highlighted.
+- `new_stations_map.html` — stations whose `start_station_name` appears
+  that month but not the month before, i.e. stations that opened.
+- `top_stations_report.md` / `top_stations_map.html` — top 10 stations by
+  average daily ridership, ranked separately for weekdays and weekends;
+  map markers colored weekday-only, weekend-only, or both (gold).
+  The report is posted to Slack only when `SEND_SLACK = True` (default
+  `False`).
+
+`plots.py` holds the shared Folium helpers (CARTO basemap, station marker,
+legend) used by the station maps.
+
+`gbfs/` pulls live snapshots of the Bluebikes GBFS feeds — see its own
+`AGENTS.md`.
