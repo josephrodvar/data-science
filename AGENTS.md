@@ -79,6 +79,23 @@ Inside each `adhoc/...` or `runbooks/...` project folder:
   plotting, for consistent fonts/palette/dpi. See the `chart-style` skill
   for full charting conventions (source footnotes, tick formatting, titles).
 
+## Notebook hygiene (for agents)
+
+Keep notebook diffs limited to real changes:
+
+- Notebooks are `nbformat: 4`, `nbformat_minor: 5`, so **every cell needs a
+  unique `id`**. Prefer the NotebookEdit tool; if writing JSON by hand, add
+  ids (the nbstripout filter keeps them via `--keep-id`).
+- **Execute with the `data-science` kernel**, never the venv default:
+  `poetry run jupyter nbconvert --to notebook --execute --inplace
+  --ExecutePreprocessor.kernel_name=data-science analysis.ipynb`. Otherwise
+  `kernelspec.name` becomes `python3` and the diff fills with local env
+  names. The filter strips `language_info` and `kernelspec.display_name`,
+  but not `kernelspec.name`.
+- The filter flags (`--keep-id --extra-keys ...`) live in local `.git/config`,
+  so re-run `poetry run nbstripout --install --keep-id --extra-keys
+  "metadata.language_info metadata.kernelspec.display_name"` on a new clone.
+
 ## `shared/`
 
 Grows opportunistically as repeated needs show up, not preemptively.
