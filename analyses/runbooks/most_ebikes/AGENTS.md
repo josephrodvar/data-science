@@ -11,4 +11,7 @@ ranks stations two ways:
   don't hit 100% on one bike;
 - top 5 by raw e-bike count.
 
-Charts and tables go to `outputs/{pulled_at}/`.
+Charts and tables go to `outputs/{pulled_at}/`. Chart titles and the Slack
+message show Boston time (`TZ`); cache keys stay UTC. Station labels carry the
+municipality from `system_regions` (GBFS has no neighborhoods). The last cell
+posts the two lists as bullets to `#bikes` (`SEND_SLACK`, `SLACK_CHANNEL`).
