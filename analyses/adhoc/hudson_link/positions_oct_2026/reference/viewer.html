@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RT Replay</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root { --bg:#fff; --fg:#111; --muted:#666; --line:#ddd; --src:#d9480f; --gz:#1c7ed6; --hl:#fff3bf; --bad:#ffe3e3; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:13px/1.35 system-ui, sans-serif; background:var(--bg); color:var(--fg); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:8px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header input[type=range] { flex:1; min-width:200px; }
+  #clock { font-variant-numeric:tabular-nums; min-width:150px; font-weight:600; }
+  main { flex:1; display:grid; grid-template-columns: 1fr 680px; min-height:0; }
+  #map { min-height:300px; }
+  #side { overflow:auto; border-left:1px solid var(--line); padding:6px 8px; }
+  h3 { margin:10px 0 4px; font-size:13px; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+  td, th { padding:2px 4px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+  th { position:sticky; top:0; background:var(--bg); }
+  tr.sel { background:var(--hl); }
+  tr.click { cursor:pointer; }
+  tr.click:hover { background:#f1f3f5; }
+  td.bad { background:var(--bad); }
+  .muted { color:var(--muted); }
+  .src { color:var(--src); } .gz { color:var(--gz); }
+  tr.future td.act { font-style:italic; }
+  .err { color:var(--muted); font-size:11px; }
+  #flags { max-height:220px; overflow:auto; }
+  .k-behind { color:#c92a2a; } .k-jump { color:#e67700; } .k-diverge { color:#5f3dc4; } .k-unresolved { color:#495057; } .k-shared { color:#087f5b; }
+  svg text { font-size:10px; fill:var(--muted); }
+  #help { border:1px solid var(--line); border-radius:4px; padding:4px 10px 8px; margin-bottom:8px; background:#f8f9fa; }
+  #help[hidden] { display:none; }
+  #help dl { display:grid; grid-template-columns:max-content 1fr; gap:3px 10px; margin:4px 0; }
+  #help dt { font-weight:600; } #help dd { margin:0; }
+  #help h4 { margin:8px 0 2px; font-size:12px; }
+  th[title] { cursor:help; text-decoration:underline dotted; }
+  @media (max-width: 900px) { main { grid-template-columns:1fr; grid-template-rows: 50vh auto; } #side { border-left:0; } }
+</style>
+</head>
+<body>
+<header>
+  <select id="ds"></select>
+  <button id="play">Play</button>
+  <select id="speed">
+    <option value="1">1 frame/s</option><option value="4" selected>4 frames/s</option>
+    <option value="10">10 frames/s</option><option value="30">30 frames/s</option>
+  </select>
+  <button id="prevf" title="previous flag">&lt; flag</button>
+  <button id="nextf" title="next flag">flag &gt;</button>
+  <button id="helpbtn" title="what the columns and flags mean">?</button>
+  <span id="clock"></span>
+  <input id="slider" type="range" min="0" max="0" value="0">
+</header>
+<main>
+  <div id="map"></div>
+  <div id="side">
+    <div id="help" hidden>
+      <h4>How it works</h4>
+      <p>A recorder ran the real poller without publishing. Every poll cycle (about 60 s) it saved the raw source responses and the updates the poller computed from them. One <b>frame</b> is one cycle. For each vehicle the replay compares two predictions: the <span class=src>source</span> tracker's (Hudson Link: CoachUSA, buswhere: Columbia County), which we pass through, and <span class=gz>gtfs.zone</span>'s, computed by the delay-estimator from the GPS position alone. <b>actual</b> is when the bus really got to each stop, taken from later frames of the recording. Slider, arrow keys (shift = 10 frames) and space to play.</p>
+      <h4>Stop table (click a vehicle)</h4>
+      <dl>
+        <dt>seq / stop</dt><dd>The stops of the GTFS trip the vehicle was matched to. Highlighted row = source's next stop. Grey rows = already passed according to gtfs.zone.</dd>
+        <dt>sched</dt><dd>The GTFS scheduled time at the stop (511NY for Hudson Link, the Columbia County feed for buswhere).</dd>
+        <dt>source raw</dt><dd>What the source tracker said about this stop in this frame. Hudson Link: <code>est</code> = CoachUSA's estimated time, <code>act</code> = actual time (not seen so far), <code>listed</code> = stop listed with no time. Buswhere: <code>eta Ns</code> = seconds from the bus's last update, and the clock time that gives. Empty = source no longer lists the stop (Hudson Link lists only remaining stops).</dd>
+        <dt class=src>source</dt><dd>The source prediction as we publish it in the GTFS-RT trip update, translated from source raw. It should equal source raw; a <span style="background:var(--bad)">red cell</span> means the translation changed it.</dd>
+        <dt class=src>source delay</dt><dd>source minus sched. + is late, - is early.</dd>
+        <dt class=gz>gtfs.zone</dt><dd>sched plus gtfs.zone's delay, for stops not yet passed.</dd>
+        <dt>actual</dt><dd>Arrival at the stop (origin: departure), from the vehicle's GPS fixes over the whole recording, so it can lie in the future of the current frame (<i>italic</i>). With fixes within 100 m of the stop it is the first of them, and the tooltip has the last one (departure, so dwell shows). Otherwise <code>~</code> marks the interpolated time the GPS projection passed the stop. 60 s polling makes it good to about 30 s.</dd>
+        <dt>(error)</dt><dd>Small number after source / gtfs.zone: prediction minus actual. + = predicted too late.</dd>
+        <dt>error line</dt><dd>Mean absolute error of each prediction against actual, over this frame's remaining stops that have an actual.</dd>
+      </dl>
+      <h4>Vehicle table and chart</h4>
+      <dl>
+        <dt>next (source/gtfs.zone)</dt><dd>Next stop sequence according to the source (as we publish it) / according to the GPS position.</dd>
+        <dt class=src>source delay</dt><dd>Our published delay at the next stop. We pass the source's prediction through, so this is the source's delay. Orange line in the chart.</dd>
+        <dt class=gz>gtfs.zone delay</dt><dd>The delay gtfs.zone's delay-estimator computes from the GPS position alone: it projects the position onto the trip's stops and compares the time with the schedule. Blue line in the chart. Independent of the source, so it is the cross-check.</dd>
+        <dt>chart</dt><dd>Delay over the trip. Shaded bands are flags. Click to jump to that time.</dd>
+      </dl>
+      <h4>Flags (per trip and vehicle)</h4>
+      <dl>
+        <dt class=k-jump>jump</dt><dd>Source delay moved 5 min or more between two frames.</dd>
+        <dt class=k-behind>behind</dt><dd>Source's next stop is behind gtfs.zone's (where the GPS says the bus is) for 2 min or more (the bus passed a stop the source still lists; the missed-stop problem).</dd>
+        <dt class=k-diverge>diverge</dt><dd>Source and gtfs.zone delay differ by 5 min or more.</dd>
+        <dt class=k-shared>shared</dt><dd>One trip published for two vehicles at once.</dd>
+        <dt class=k-unresolved>unresolved</dt><dd>The source has a vehicle we published nothing for.</dd>
+      </dl>
+      <h4>Map</h4>
+      <dl>
+        <dt>lines</dt><dd>GTFS shapes of every trip seen that day, one color per route (feed colors when they differ, else derived from the route id). Selected trip drawn bold.</dd>
+        <dt>vehicles</dt><dd>Published vehicles in their route color, black outline = selected. Arrows point along the source's reported bearing (Hudson Link); buswhere reports none, so dots. Grey dashed = unresolved source vehicle.</dd>
+        <dt>stops</dt><dd>Selected trip's stops. Big <span class=src>orange</span> / <span class=gz>blue</span> stop = next stop by source / gtfs.zone.</dd>
+      </dl>
+    </div>
+    <div class="muted" id="summary"></div>
+    <h3>Vehicles in this frame</h3>
+    <table id="vehicles"></table>
+    <h3 id="trip-title">Selected vehicle</h3>
+    <div id="chart"></div>
+    <div class="muted" id="mae"></div>
+    <table id="stops"></table>
+    <h3>Flags <select id="kind"><option value="">all</option></select></h3>
+    <div id="flags"><table id="flaglist"></table></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let D = null, idx = 0, sel = null, timer = null;
+// Header tooltips; the ? panel has the long version.
+const TIP = {
+  sched: "GTFS scheduled time",
+  raw: "what the source tracker said for this stop (est / act / listed, or eta)",
+  src: "source prediction as we publish it, translated from raw; red = differs from raw; (prediction - actual)",
+  delay: "source minus sched",
+  gzT: "sched + gtfs.zone delay (from GPS), for stops not yet passed; (prediction - actual)",
+  act: "when the bus reached the stop (origin: left it), from later GPS fixes; ~ = interpolated; italic = after this frame",
+  next: "next stop sequence: source (as published) / gtfs.zone (GPS)",
+  src_d: "our published delay at the next stop = the source's delay",
+  gz: "delay computed by gtfs.zone from the GPS position alone",
+};
+function setHelp(open) {
+  $("help").hidden = !open;
+  try { localStorage.setItem("help", open ? "1" : ""); } catch {}
+}
+$("helpbtn").onclick = () => setHelp($("help").hidden);
+try { setHelp(localStorage.getItem("help") === "1"); } catch {}
+const fmtT = (t) => t == null ? "" : new Date(t * 1000).toLocaleTimeString("en-US", { timeZone: D.tz, hour12: false });
+const fmtD = (s) => s == null ? "" : (s < 0 ? "-" : "+") + Math.floor(Math.abs(s) / 60) + ":" + String(Math.abs(s) % 60).padStart(2, "0");
+
+const map = L.map("map").setView([41.5, -73.9], 9);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "OSM" }).addTo(map);
+const shapeLayer = L.layerGroup().addTo(map), layer = L.layerGroup().addTo(map), tripLayer = L.layerGroup().addTo(map);
+// Feed route_color when the feed's colors tell routes apart, else a hue hashed from the route id.
+function routeColor(route) {
+  if (D.routes?.[route]) return D.routes[route];
+  let h = 0x811c9dc5;
+  for (const c of String(route)) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+  // Avalanche so ids that differ by one character land on distant hues.
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+  return `hsl(${(h >>> 0) % 360}, 65%, 42%)`;
+}
+// Vehicle as an arrow pointing along its bearing (degrees clockwise from north).
+function arrowMarker(v, color, isSel) {
+  const size = isSel ? 30 : 24;
+  const svg = `<svg width="${size}" height="${size}" viewBox="-10 -10 20 20" style="transform:rotate(${v.bearing}deg)">` +
+    `<path d="M0,-9 L7,7 L0,3 L-7,7 Z" fill="${color}" stroke="${isSel ? "#000" : "#fff"}" stroke-width="${isSel ? 2 : 1.2}" stroke-linejoin="round"/></svg>`;
+  return L.marker([v.lat, v.lon], { icon: L.divIcon({ html: svg, className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: isSel ? 1000 : 0 });
+}
+function drawShapes() {
+  shapeLayer.clearLayers();
+  const seen = new Set();
+  for (const t of Object.values(D.trips)) {
+    if (!t.shape_id || seen.has(t.shape_id) || !D.shapes?.[t.shape_id]) continue;
+    seen.add(t.shape_id);
+    L.polyline(D.shapes[t.shape_id], { color: routeColor(t.route), weight: 3, opacity: 0.45 }).bindTooltip(t.route, { sticky: true }).addTo(shapeLayer);
+  }
+}
+let fitted = false;
+
+async function loadIndex() {
+  const index = await (await fetch("replay/index.json")).json();
+  for (const i of index) {
+    const o = document.createElement("option");
+    o.value = i.file;
+    const f = Object.entries(i.flags).map(([k, n]) => `${k} ${n}`).join(", ");
+    o.textContent = `${i.date} ${i.source} (${i.frames} frames${f ? "; " + f : ""})`;
+    $("ds").append(o);
+  }
+  const saved = location.hash.slice(1);
+  if (saved && index.some((i) => i.file === saved)) $("ds").value = saved;
+  await loadDay($("ds").value);
+}
+
+async function loadDay(file) {
+  stop();
+  location.hash = file;
+  $("summary").textContent = "loading " + file + "...";
+  D = await (await fetch("replay/" + file)).json();
+  // Per trip+vehicle series for the chart.
+  D.series = {};
+  D.frames.forEach((f, i) => f.v.forEach((v) => {
+    const k = v.trip + "|" + v.id;
+    (D.series[k] ||= []).push([f.t, v.ours.length ? v.ours[0][2] : null, v.est ? v.est[0] : null, i]);
+  }));
+  const kinds = [...new Set(D.flags.map((f) => f.kind))];
+  $("kind").innerHTML = '<option value="">all</option>' + kinds.map((k) => `<option>${k}</option>`).join("");
+  $("slider").max = D.frames.length - 1;
+  sel = null; fitted = false;
+  drawShapes();
+  $("summary").textContent = `${D.source} ${D.date}: ${D.frames.length} frames, ${Object.keys(D.trips).length} trips, ${D.flags.length} flags. Times in ${D.tz}.`;
+  renderFlags();
+  // Start at the first frame with a vehicle.
+  seek(Math.max(0, D.frames.findIndex((f) => f.v.length)));
+}
+
+function seek(i) {
+  idx = Math.max(0, Math.min(D.frames.length - 1, i));
+  $("slider").value = idx;
+  render();
+}
+
+function render() {
+  const f = D.frames[idx];
+  $("clock").textContent = fmtT(f.t) + (f.err ? " ERROR" : "");
+  layer.clearLayers();
+  const pts = [];
+  for (const v of f.v) {
+    const k = v.trip + "|" + v.id, isSel = k === sel;
+    const rc = routeColor(D.trips[v.trip].route);
+    const m = v.bearing != null ? arrowMarker(v, rc, isSel)
+      : L.circleMarker([v.lat, v.lon], { radius: isSel ? 9 : 6, color: isSel ? "#000" : rc, fillColor: rc, weight: 2, fillOpacity: 0.85 });
+    m.bindTooltip(`${v.label || v.id} ${D.trips[v.trip].route} ${fmtD(v.ours[0]?.[2])}`).on("click", () => { sel = k; render(); });
+    m.addTo(layer); pts.push([v.lat, v.lon]);
+  }
+  for (const u of f.un) {
+    L.circleMarker([u.lat, u.lon], { radius: 6, color: "#868e96", dashArray: "2", fillOpacity: 0.2 }).bindTooltip("unresolved " + u.id).addTo(layer);
+    pts.push([u.lat, u.lon]);
+  }
+  if (!fitted && pts.length) { map.fitBounds(pts, { maxZoom: 13, padding: [40, 40] }); fitted = true; }
+
+  $("vehicles").innerHTML = `<tr><th>vehicle</th><th>route</th><th>trip</th><th title="${TIP.next}">next (source/gtfs.zone)</th><th class=src title="${TIP.src_d}">source delay</th><th class=gz title="${TIP.gz}">gtfs.zone delay</th></tr>` +
+    f.v.map((v) => {
+      const k = v.trip + "|" + v.id, t = D.trips[v.trip];
+      const up = v.ours[0]?.[2], est = v.est?.[0];
+      const bad = up != null && est != null && Math.abs(up - est) >= 300;
+      return `<tr class="click ${k === sel ? "sel" : ""}" data-k="${k}"><td>${v.label || v.id}</td><td>${t.route}</td><td>${t.trip_id}</td>` +
+        `<td>${v.next ?? "-"} / ${v.est?.[1] ?? "-"}</td><td class="src ${bad ? "bad" : ""}">${fmtD(up)}</td><td class=gz>${fmtD(est)}</td></tr>`;
+    }).join("") +
+    f.un.map((u) => `<tr class=muted><td>${u.id}</td><td colspan=5>source only, nothing published</td></tr>`).join("");
+  for (const tr of $("vehicles").querySelectorAll("tr.click")) tr.onclick = () => { sel = tr.dataset.k; render(); };
+  renderSelected(f);
+}
+
+function renderSelected(f) {
+  tripLayer.clearLayers();
+  const v = sel && f.v.find((v) => v.trip + "|" + v.id === sel);
+  if (!sel) { $("trip-title").textContent = "Selected vehicle (click one)"; $("chart").innerHTML = ""; $("stops").innerHTML = ""; $("mae").innerHTML = ""; return; }
+  const [trip_id, start_date, ...rest] = sel.split("|");
+  const trip = D.trips[trip_id + "|" + start_date];
+  $("trip-title").textContent = `${rest.join("|")} on ${trip.route} trip ${trip_id} (${start_date})` + (v ? "" : " (not in this frame)");
+  renderChart(D.series[sel] || []);
+
+  // Trip polyline and stops on the map.
+  const line = D.shapes?.[trip.shape_id] || trip.schedule.map(([, sid]) => D.stops[sid].slice(0, 2));
+  L.polyline(line, { color: routeColor(trip.route), weight: 5, opacity: 0.9 }).addTo(tripLayer);
+  for (const [seq, sid] of trip.schedule) {
+    const isOurs = v && v.next === seq, isEst = v && v.est && v.est[1] === seq;
+    L.circleMarker(D.stops[sid].slice(0, 2), { radius: isOurs || isEst ? 7 : 3, color: isOurs ? "#d9480f" : isEst ? "#1c7ed6" : "#495057", weight: 2, fillOpacity: 0.5 })
+      .bindTooltip(`${seq} ${D.stops[sid][2]}`).addTo(tripLayer);
+  }
+
+  // Stop table: schedule | source raw | source | gtfs.zone | actual.
+  const ours = new Map((v?.ours || []).map((o) => [o[0], o]));
+  const raw = new Map();
+  for (const r of v?.raw || []) if (r[0] != null && !raw.has(r[0])) raw.set(r[0], r);
+  const act = new Map((D.actual?.[sel] || []).map((a) => [a[0], a]));
+  const err = (pred, a) => pred != null && a ? ` <span class=err>(${fmtD(pred - (a[1] ?? a[2]))})</span>` : "";
+  const errs = { src: [], gz: [] };
+  let rows = `<tr><th>seq</th><th>stop</th><th title="${TIP.sched}">sched</th><th title="${TIP.raw}">source raw</th><th class=src title="${TIP.src}">source</th><th class=src title="${TIP.delay}">source delay</th><th class=gz title="${TIP.gzT}">gtfs.zone</th><th title="${TIP.act}">actual</th></tr>`;
+  for (const [seq, sid, sched] of trip.schedule) {
+    const o = ours.get(seq), r = raw.get(sid), a = act.get(seq);
+    let rawTxt = "";
+    if (r) {
+      if (D.source === "hudsonlink") rawTxt = r[4] ? "act " + fmtT(r[4]) : r[3] ? "est " + fmtT(r[3]) : "listed";
+      else rawTxt = r[5] != null && typeof r[5] !== "number" ? String(r[5]) : `eta ${r[5]}s ${fmtT(r[3])}`;
+    }
+    const passed = v?.est && seq < v.est[1];
+    const gzT = v?.est && !passed ? sched + v.est[0] : null;
+    // Source should equal the raw prediction (hudsonlink: est/act; buswhere: ts + eta).
+    const rawT = r ? (r[4] || r[3]) : null;
+    const mismatch = o && rawT != null && o[1] !== rawT;
+    const at = a ? a[1] ?? a[2] : null;
+    if (a && at > f.t) {
+      if (o) errs.src.push(Math.abs(o[1] - at));
+      if (gzT != null) errs.gz.push(Math.abs(gzT - at));
+    }
+    const actTxt = a ? (a[3] ? "~" : "") + (a[1] == null ? "dep " : "") + fmtT(at) : "";
+    const actTip = a && a[1] != null && a[2] !== a[1] ? ` title="left ${fmtT(a[2])}"` : "";
+    const cls = [v && v.next === seq ? "sel" : "", passed ? "muted" : "", at > f.t ? "future" : ""].join(" ");
+    rows += `<tr class="${cls}"><td>${seq}</td><td title="${D.stops[sid][2]}">${D.stops[sid][2].slice(0, 22)}</td><td>${fmtT(sched)}</td><td>${rawTxt}</td>` +
+      `<td class="${mismatch ? "bad" : ""}">${o ? fmtT(o[1]) + err(o[1], a) : ""}</td><td>${o ? fmtD(o[2]) : ""}</td>` +
+      `<td class=gz>${gzT != null ? fmtT(gzT) + err(gzT, a) : ""}</td><td class=act${actTip}>${actTxt}</td></tr>`;
+  }
+  const extra = (v?.raw || []).filter((r) => r[0] == null || !trip.schedule.some(([, sid]) => sid === r[0]));
+  if (extra.length) rows += `<tr><td colspan=8 class=muted>source raw stops not on this trip: ${extra.map((r) => `${r[1]}=${r[5] ?? fmtT(r[3])}`).join(", ")}</td></tr>`;
+  const mae = (xs) => xs.length ? fmtD(Math.round(xs.reduce((p, x) => p + x, 0) / xs.length)).slice(1) + ` over ${xs.length}` : "-";
+  $("mae").innerHTML = v ? `Error vs actual, remaining stops: <span class=src>source ${mae(errs.src)}</span>, <span class=gz>gtfs.zone ${mae(errs.gz)}</span>` : "";
+  $("stops").innerHTML = rows;
+}
+
+function renderChart(s) {
+  if (!s.length) { $("chart").innerHTML = ""; return; }
+  const W = 660, H = 150, P = 28;
+  const t0 = s[0][0], t1 = s[s.length - 1][0] || t0 + 1;
+  const vals = s.flatMap((p) => [p[1], p[2]]).filter((x) => x != null);
+  let lo = Math.min(-120, ...vals), hi = Math.max(120, ...vals);
+  lo = Math.max(lo, -3600); hi = Math.min(hi, 3600);
+  const x = (t) => P + (t - t0) / Math.max(1, t1 - t0) * (W - P - 4);
+  const y = (d) => 4 + (hi - Math.max(lo, Math.min(hi, d))) / (hi - lo) * (H - 20);
+  const path = (j) => s.filter((p) => p[j] != null).map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + "," + y(p[j]).toFixed(1)).join("");
+  const cur = D.frames[idx].t;
+  const flags = D.flags.filter((f) => f.trip === sel || (f.kind === "shared" && sel.startsWith(f.trip)));
+  let svg = `<svg width="${W}" height="${H}" style="cursor:crosshair">`;
+  for (const g of [lo, 0, hi]) svg += `<line x1=${P} x2=${W} y1=${y(g)} y2=${y(g)} stroke="#ddd"/><text x=0 y=${y(g) + 3}>${fmtD(Math.round(g))}</text>`;
+  for (const f of flags) svg += `<rect x=${x(f.t)} y=4 width=${Math.max(2, x(f.end) - x(f.t))} height=${H - 20} fill="#ffd8a8" opacity=0.6><title>${f.kind}</title></rect>`;
+  svg += `<path d="${path(1)}" fill=none stroke="var(--src)" stroke-width="1.5"/><path d="${path(2)}" fill=none stroke="var(--gz)" stroke-width="1.5"/>`;
+  if (cur >= t0 && cur <= t1) svg += `<line x1=${x(cur)} x2=${x(cur)} y1=0 y2=${H - 16} stroke="#000"/>`;
+  svg += `<text x=${P} y=${H - 3}>${fmtT(t0)}</text><text x=${W - 50} y=${H - 3}>${fmtT(t1)}</text>`;
+  svg += `<text x=${W / 2 - 60} y=${H - 3}><tspan fill="var(--src)">source</tspan> vs <tspan fill="var(--gz)">gtfs.zone</tspan> delay</text></svg>`;
+  $("chart").innerHTML = svg;
+  $("chart").firstChild.onclick = (e) => {
+    const t = t0 + (e.offsetX - P) / (W - P - 4) * (t1 - t0);
+    const p = s.reduce((a, b) => Math.abs(b[0] - t) < Math.abs(a[0] - t) ? b : a);
+    seek(p[3]);
+  };
+}
+
+function flagText(f) {
+  const d = Math.round((f.end - f.t) / 60);
+  switch (f.kind) {
+    case "jump": return `source delay ${fmtD(f.from)} to ${fmtD(f.to)}`;
+    case "behind": return `source next stop ${f.ours_next} behind gtfs.zone (${f.est_next}) for ${d} min`;
+    case "diverge": return `source ${fmtD(f.up)} vs gtfs.zone ${fmtD(f.est)} for ${d} min`;
+    case "shared": return `${f.ids.join(", ")} on one trip for ${d} min`;
+    case "unresolved": return `source vehicle not published for ${d} min`;
+  }
+  return "";
+}
+
+function renderFlags() {
+  const kind = $("kind").value;
+  const list = D.flags.filter((f) => !kind || f.kind === kind);
+  $("flaglist").innerHTML = list.map((f, i) =>
+    `<tr class=click data-i="${D.flags.indexOf(f)}"><td>${fmtT(f.t)}</td><td class="k-${f.kind}">${f.kind}</td><td>${f.trip.split("|").filter((_, j) => j !== 1).join(" ")}</td><td>${flagText(f)}</td></tr>`).join("");
+  for (const tr of $("flaglist").querySelectorAll("tr")) tr.onclick = () => gotoFlag(D.flags[tr.dataset.i]);
+}
+
+function gotoFlag(f) {
+  const parts = f.trip.split("|");
+  if (parts.length >= 3) sel = f.trip;
+  else if (f.kind === "shared") sel = f.trip + "|" + f.ids[0];
+  seek(D.frames.findIndex((fr) => fr.t >= f.t));
+}
+
+function stepFlag(dir) {
+  const kind = $("kind").value, t = D.frames[idx].t;
+  const list = D.flags.filter((f) => !kind || f.kind === kind);
+  const f = dir > 0 ? list.find((f) => f.t > t) : [...list].reverse().find((f) => f.t < t);
+  if (f) gotoFlag(f);
+}
+
+function stop() { clearInterval(timer); timer = null; $("play").textContent = "Play"; }
+function play() {
+  stop();
+  $("play").textContent = "Pause";
+  timer = setInterval(() => { if (idx >= D.frames.length - 1) return stop(); seek(idx + 1); }, 1000 / +$("speed").value);
+}
+$("play").onclick = () => timer ? stop() : play();
+$("speed").onchange = () => timer && play();
+$("slider").oninput = (e) => seek(+e.target.value);
+$("ds").onchange = (e) => loadDay(e.target.value);
+$("kind").onchange = renderFlags;
+$("nextf").onclick = () => stepFlag(1);
+$("prevf").onclick = () => stepFlag(-1);
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "SELECT") return;
+  if (e.key === "ArrowRight") seek(idx + (e.shiftKey ? 10 : 1));
+  if (e.key === "ArrowLeft") seek(idx - (e.shiftKey ? 10 : 1));
+  if (e.key === " ") { e.preventDefault(); timer ? stop() : play(); }
+});
+loadIndex();
+</script>
+</body>
+</html>
