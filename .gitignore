@@ -238,3 +238,5 @@ analyses/**/outputs/**
 # Local secrets (API keys, etc.) — copy config_secrets_template.yml to
 # config_secrets.yml and fill it in; the template stays tracked.
 config_secrets.yml
+# macOS
+.DS_Store
