@@ -6,3 +6,8 @@ mbta:
     vehicle_positions: VehiclePositions.pb
     trip_updates: TripUpdates.pb
     alerts: Alerts.pb
+
+hudsonlink:
+  base_url: https://rt.gtfs.zone/hudsonlink
+  feeds:
+    vehicle_positions: vehicle_positions.pb
